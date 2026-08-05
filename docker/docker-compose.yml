@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: callum
+      POSTGRES_PASSWORD: callum
+      POSTGRES_DB: callum
+    ports:
+      - "5432:5432"
+    volumes:
+      - callum_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U callum"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - callum_qdrant:/qdrant/storage
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: callum
+      MINIO_ROOT_PASSWORD: callumsecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - callum_minio:/data
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    env_file:
+      - ../apps/api/.env.example
+    environment:
+      DATABASE_URL: postgresql+asyncpg://callum:callum@postgres:5432/callum
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      MINIO_ENDPOINT: minio:9000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../apps/api:/app
+      - callum_uploads:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_started
+
+volumes:
+  callum_pg:
+  callum_qdrant:
+  callum_minio:
+  callum_uploads:
