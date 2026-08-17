@@ -1,11 +1,13 @@
 from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.store import store
-from app.models.schemas import Document, DocumentModality
+from app.db.repository import Repository
+from app.db.session import get_db
+from app.models.schemas import Document
 from app.services.ingest import detect_modality, enqueue_ingest
 
 router = APIRouter()
@@ -15,8 +17,10 @@ router = APIRouter()
 async def upload_document(
     project_id: str = Form(...),
     file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
 ) -> Document:
-    if not store.get_project(project_id):
+    repo = Repository(db)
+    if not await repo.get_project(project_id):
         raise HTTPException(status_code=404, detail="project not found")
 
     data = await file.read()
@@ -25,14 +29,18 @@ async def upload_document(
         raise HTTPException(status_code=413, detail=f"file exceeds {settings.max_upload_mb}mb")
 
     modality = detect_modality(file.filename or "upload.bin", file.content_type)
-    doc = Document(
+    filename = file.filename or "upload.bin"
+    title = Path(filename).stem.replace("_", " ")
+
+    # Persist row first to get id, then write file with that id
+    doc = await repo.add_document(
         project_id=project_id,
-        filename=file.filename or "upload.bin",
+        filename=filename,
         modality=modality,
         content_type=file.content_type,
         size_bytes=len(data),
         status="queued",
-        title=Path(file.filename or "upload").stem.replace("_", " "),
+        title=title,
     )
 
     upload_root = Path(settings.upload_dir) / project_id
@@ -41,6 +49,7 @@ async def upload_document(
     async with aiofiles.open(dest, "wb") as f:
         await f.write(data)
 
-    store.add_document(doc)
-    await enqueue_ingest(doc.id)
-    return doc
+    await repo.update_document(doc.id, storage_path=str(dest))
+    await enqueue_ingest(db, doc.id)
+    updated = await repo.get_document(doc.id)
+    return updated or doc

@@ -1,16 +1,18 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.research import sse, stream_research_response
-from app.db.store import store
+from app.db.repository import Repository
+from app.db.session import get_db
 from app.models.schemas import AgentRequest
 
 router = APIRouter()
 
 
 @router.post("/run")
-async def run_agent(body: AgentRequest):
-    if not store.get_project(body.project_id):
+async def run_agent(body: AgentRequest, db: AsyncSession = Depends(get_db)):
+    if not await Repository(db).get_project(body.project_id):
         raise HTTPException(status_code=404, detail="project not found")
 
     async def event_stream():

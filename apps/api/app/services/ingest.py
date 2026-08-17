@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from app.db.store import store
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.repository import Repository
 from app.models.schemas import DocumentModality
 
 EXT_MAP = {
@@ -43,13 +45,15 @@ def detect_modality(filename: str, content_type: str | None = None) -> DocumentM
     return DocumentModality.unknown
 
 
-async def enqueue_ingest(document_id: str) -> None:
-    """Mark document processing. Celery workers will own the real pipeline."""
-    doc = store.documents.get(document_id)
+async def enqueue_ingest(session: AsyncSession, document_id: str) -> None:
+    """Mark document processing. Celery workers will own the real pipeline later."""
+    repo = Repository(session)
+    doc = await repo.get_document(document_id)
     if not doc:
         return
-    doc.status = "processing"
-    # Local MVP: instant ready. Production: parse → extract → embed → graph.
-    doc.status = "ready"
-    if not doc.abstract:
-        doc.abstract = "queued for multimodal parse, figure/table/equation extraction, and indexing."
+    await repo.update_document(document_id, status="processing")
+    # Step 1: persistence only. Step 3 will add real parse → extract → embed.
+    abstract = doc.abstract or (
+        "queued for multimodal parse, figure/table/equation extraction, and indexing."
+    )
+    await repo.update_document(document_id, status="ready", abstract=abstract)

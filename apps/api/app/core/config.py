@@ -17,7 +17,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    database_url: str = "postgresql+asyncpg://callum:callum@localhost:5432/callum"
+    # Default: local sqlite so the API boots without Docker.
+    # For Postgres: postgresql+asyncpg://callum:callum@localhost:5432/callum
+    database_url: str = "sqlite+aiosqlite:///./data/callum.db"
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
     minio_endpoint: str = "localhost:9000"

@@ -11,4 +11,5 @@ async def health() -> dict:
         "status": "ok",
         "service": settings.app_name,
         "environment": settings.environment,
+        "database": "sqlite" if settings.database_url.startswith("sqlite") else "postgres",
     }

@@ -51,13 +51,16 @@ docker compose up -d postgres redis qdrant minio
 | --- | --- |
 | workspace shell (lowercase macOS ui) | ready |
 | project + document library | ready |
+| **postgres/sqlite persistence** | ready (step 1) |
 | multimodal upload ingest stub | ready |
 | streaming research agent + citations | ready (demo stream) |
-| knowledge graph explorer | ready |
-| hybrid search endpoint | ready (lexical mvp) |
+| knowledge graph explorer | ready (persisted) |
+| hybrid search endpoint | ready (sql lexical; qdrant next) |
 | literature review / gaps / experiments | agent modes wired |
-| full multimodal parse (nougat/docling/whisper) | next |
-| qdrant hybrid + cross-encoder rerank | next |
+| minio object storage | next (step 2) |
+| full multimodal parse (nougat/docling/whisper) | next (step 3) |
+| qdrant hybrid + cross-encoder rerank | next (step 4) |
+| live langgraph llm agent | next (step 5) |
 | celery workers + gpu embedding farm | next |
 
 ## design
