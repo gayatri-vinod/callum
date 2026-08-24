@@ -23,6 +23,58 @@ export type Document = {
   meta: Record<string, unknown>;
 };
 
+export type DocumentPage = {
+  id: string;
+  document_id: string;
+  page_number: number;
+  text: string;
+  width?: number | null;
+  height?: number | null;
+  image_count: number;
+  meta: Record<string, unknown>;
+};
+
+export type DocumentChunk = {
+  id: string;
+  document_id: string;
+  ordinal: number;
+  page_start: number;
+  page_end: number;
+  section?: string | null;
+  text: string;
+  char_count: number;
+  token_estimate: number;
+};
+
+export type DocumentReference = {
+  id: string;
+  document_id: string;
+  ordinal: number;
+  raw_text: string;
+  title?: string | null;
+  doi?: string | null;
+  url?: string | null;
+};
+
+export type DocumentAsset = {
+  id: string;
+  document_id: string;
+  page_number?: number | null;
+  kind: string;
+  filename: string;
+  content_type: string;
+  width?: number | null;
+  height?: number | null;
+};
+
+export type DocumentExtraction = {
+  document: Document;
+  pages: DocumentPage[];
+  chunks: DocumentChunk[];
+  references: DocumentReference[];
+  assets: DocumentAsset[];
+};
+
 export type SearchHit = {
   id: string;
   title: string;
@@ -75,6 +127,12 @@ export const api = {
   project: (id: string) => request<Project>(`/api/projects/${id}`),
   documents: (projectId: string) =>
     request<Document[]>(`/api/projects/${projectId}/documents`),
+  extraction: (projectId: string, documentId: string) =>
+    request<DocumentExtraction>(
+      `/api/projects/${projectId}/documents/${documentId}/extraction`
+    ),
+  assetContentUrl: (assetId: string) =>
+    `${API_BASE}/api/upload/assets/${assetId}/content`,
   search: (query: string, projectId?: string) =>
     request<SearchHit[]>("/api/search", {
       method: "POST",

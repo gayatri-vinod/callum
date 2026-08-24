@@ -99,3 +99,24 @@ async def download_document(
         media_type=media,
         headers={"Content-Disposition": content_disposition(row.filename)},
     )
+
+
+@router.get("/assets/{asset_id}/content")
+async def download_extracted_asset(
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    from app.db.models import DocumentAssetRow
+
+    asset = await db.get(DocumentAssetRow, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="asset not found")
+    try:
+        data, content_type = await get_storage().get_bytes(asset.storage_path)
+    except StorageError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=data,
+        media_type=content_type or asset.content_type,
+        headers={"Content-Disposition": content_disposition(asset.filename)},
+    )

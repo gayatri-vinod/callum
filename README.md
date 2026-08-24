@@ -60,12 +60,12 @@ Storage modes (`STORAGE_BACKEND`):
 | project + document library | ready |
 | **postgres/sqlite persistence** | ready (step 1) |
 | **minio object storage** | ready (step 2; local fallback) |
-| multimodal upload ingest stub | ready |
+| **pdf + text ingestion** | ready (step 3; pages, chunks, references, figures) |
 | streaming research agent + citations | ready (demo stream) |
 | knowledge graph explorer | ready (persisted) |
 | hybrid search endpoint | ready (sql lexical; qdrant next) |
 | literature review / gaps / experiments | agent modes wired |
-| full multimodal parse (nougat/docling/whisper) | next (step 3) |
+| scanned PDF OCR / audio / video / slides | later multimodal extension |
 | qdrant hybrid + cross-encoder rerank | next (step 4) |
 | live langgraph llm agent | next (step 5) |
 | celery workers + gpu embedding farm | next |
@@ -89,3 +89,17 @@ callum/
 - refuse weak evidence instead of fabricating sources
 - async everywhere, stream by default
 - modular services, production-shaped from day one
+
+## document ingestion
+
+Uploaded PDFs are parsed with PyMuPDF. callum persists:
+
+- page text and dimensions with stable 1-based page anchors
+- section-aware, overlapping citation chunks
+- PDF metadata, title, authors, and abstract
+- bibliography entries with DOI and URL detection
+- embedded figures in MinIO/local object storage
+
+Use `GET /api/projects/{project_id}/documents/{document_id}/extraction` to
+inspect the complete extraction. Scanned PDFs are marked failed with an
+explicit “OCR is required” reason rather than silently producing empty text.

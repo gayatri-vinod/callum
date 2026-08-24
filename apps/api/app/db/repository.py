@@ -1,14 +1,28 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import DocumentRow, GraphEdgeRow, GraphNodeRow, ProjectRow
+from app.db.models import (
+    DocumentAssetRow,
+    DocumentChunkRow,
+    DocumentPageRow,
+    DocumentReferenceRow,
+    DocumentRow,
+    GraphEdgeRow,
+    GraphNodeRow,
+    ProjectRow,
+)
 from app.models.schemas import (
     Document,
+    DocumentAsset,
+    DocumentChunk,
+    DocumentExtraction,
     DocumentModality,
+    DocumentPage,
+    DocumentReference,
     GraphEdge,
     GraphNode,
     KnowledgeGraph,
@@ -19,9 +33,9 @@ from app.models.schemas import (
 
 def _dt(value: datetime | None) -> datetime:
     if value is None:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
     return value
 
 
@@ -103,6 +117,10 @@ class Repository:
         row = await self.session.get(DocumentRow, document_id)
         return document_to_schema(row) if row else None
 
+    async def get_document_storage_path(self, document_id: str) -> str | None:
+        row = await self.session.get(DocumentRow, document_id)
+        return row.storage_path if row else None
+
     async def add_document(
         self,
         *,
@@ -139,10 +157,123 @@ class Repository:
 
         project = await self.session.get(ProjectRow, project_id)
         if project:
-            project.updated_at = datetime.now(timezone.utc)
+            project.updated_at = datetime.now(UTC)
 
         await self.session.flush()
         return document_to_schema(row)
+
+    async def replace_extraction(
+        self,
+        document_id: str,
+        *,
+        pages: list[dict],
+        chunks: list[dict],
+        references: list[dict],
+        assets: list[dict],
+    ) -> None:
+        """Atomically replace all deterministic extraction output for a document."""
+        for model in (
+            DocumentPageRow,
+            DocumentChunkRow,
+            DocumentReferenceRow,
+            DocumentAssetRow,
+        ):
+            await self.session.execute(delete(model).where(model.document_id == document_id))
+
+        self.session.add_all([DocumentPageRow(document_id=document_id, **page) for page in pages])
+        self.session.add_all(
+            [DocumentChunkRow(document_id=document_id, **chunk) for chunk in chunks]
+        )
+        self.session.add_all(
+            [DocumentReferenceRow(document_id=document_id, **reference) for reference in references]
+        )
+        self.session.add_all(
+            [DocumentAssetRow(document_id=document_id, **asset) for asset in assets]
+        )
+        await self.session.flush()
+
+    async def get_extraction(self, document_id: str) -> DocumentExtraction | None:
+        document = await self.get_document(document_id)
+        if not document:
+            return None
+        page_result = await self.session.execute(
+            select(DocumentPageRow)
+            .where(DocumentPageRow.document_id == document_id)
+            .order_by(DocumentPageRow.page_number)
+        )
+        chunk_result = await self.session.execute(
+            select(DocumentChunkRow)
+            .where(DocumentChunkRow.document_id == document_id)
+            .order_by(DocumentChunkRow.ordinal)
+        )
+        reference_result = await self.session.execute(
+            select(DocumentReferenceRow)
+            .where(DocumentReferenceRow.document_id == document_id)
+            .order_by(DocumentReferenceRow.ordinal)
+        )
+        asset_result = await self.session.execute(
+            select(DocumentAssetRow)
+            .where(DocumentAssetRow.document_id == document_id)
+            .order_by(DocumentAssetRow.page_number, DocumentAssetRow.id)
+        )
+        return DocumentExtraction(
+            document=document,
+            pages=[
+                DocumentPage(
+                    id=row.id,
+                    document_id=row.document_id,
+                    page_number=row.page_number,
+                    text=row.text,
+                    width=row.width,
+                    height=row.height,
+                    image_count=row.image_count,
+                    meta=dict(row.meta or {}),
+                )
+                for row in page_result.scalars().all()
+            ],
+            chunks=[
+                DocumentChunk(
+                    id=row.id,
+                    document_id=row.document_id,
+                    ordinal=row.ordinal,
+                    page_start=row.page_start,
+                    page_end=row.page_end,
+                    section=row.section,
+                    text=row.text,
+                    char_count=row.char_count,
+                    token_estimate=row.token_estimate,
+                    meta=dict(row.meta or {}),
+                )
+                for row in chunk_result.scalars().all()
+            ],
+            references=[
+                DocumentReference(
+                    id=row.id,
+                    document_id=row.document_id,
+                    ordinal=row.ordinal,
+                    raw_text=row.raw_text,
+                    title=row.title,
+                    doi=row.doi,
+                    url=row.url,
+                    meta=dict(row.meta or {}),
+                )
+                for row in reference_result.scalars().all()
+            ],
+            assets=[
+                DocumentAsset(
+                    id=row.id,
+                    document_id=row.document_id,
+                    page_number=row.page_number,
+                    kind=row.kind,
+                    filename=row.filename,
+                    content_type=row.content_type,
+                    width=row.width,
+                    height=row.height,
+                    meta=dict(row.meta or {}),
+                )
+                for row in asset_result.scalars().all()
+            ],
+        )
 
     async def update_document(
         self,
@@ -170,7 +301,7 @@ class Repository:
             row.meta = meta
         if storage_path is not None:
             row.storage_path = storage_path
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         await self.session.flush()
         return document_to_schema(row)
 

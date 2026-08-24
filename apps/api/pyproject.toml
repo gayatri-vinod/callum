@@ -20,6 +20,7 @@ dependencies = [
   "aiosqlite>=0.20.0",
   "asyncpg>=0.30.0",
   "minio>=7.2.0",
+  "pymupdf>=1.26.0",
 ]
 
 [project.optional-dependencies]
@@ -48,6 +49,10 @@ packages = ["app"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# FastAPI intentionally evaluates dependency marker calls in signatures.
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

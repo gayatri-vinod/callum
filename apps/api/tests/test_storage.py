@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 
+import fitz
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -56,7 +57,11 @@ async def test_health_reports_local_storage(client):
 
 @pytest.mark.asyncio
 async def test_upload_and_download_roundtrip(client):
-    payload = b"%PDF-1.4 fake paper content for callum storage test"
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.insert_text((72, 72), "Callum storage integration test")
+    payload = pdf.tobytes()
+    pdf.close()
     files = {"file": ("medsam_notes.pdf", payload, "application/pdf")}
     data = {"project_id": "proj_sam_medical"}
 

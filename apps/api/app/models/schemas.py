@@ -52,6 +52,61 @@ class Document(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class DocumentPage(BaseModel):
+    id: str
+    document_id: str
+    page_number: int
+    text: str
+    width: float | None = None
+    height: float | None = None
+    image_count: int = 0
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentChunk(BaseModel):
+    id: str
+    document_id: str
+    ordinal: int
+    page_start: int
+    page_end: int
+    section: str | None = None
+    text: str
+    char_count: int
+    token_estimate: int
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentReference(BaseModel):
+    id: str
+    document_id: str
+    ordinal: int
+    raw_text: str
+    title: str | None = None
+    doi: str | None = None
+    url: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentAsset(BaseModel):
+    id: str
+    document_id: str
+    page_number: int | None = None
+    kind: str
+    filename: str
+    content_type: str
+    width: int | None = None
+    height: int | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentExtraction(BaseModel):
+    document: Document
+    pages: list[DocumentPage] = Field(default_factory=list)
+    chunks: list[DocumentChunk] = Field(default_factory=list)
+    references: list[DocumentReference] = Field(default_factory=list)
+    assets: list[DocumentAsset] = Field(default_factory=list)
+
+
 class Citation(BaseModel):
     paper_id: str | None = None
     title: str

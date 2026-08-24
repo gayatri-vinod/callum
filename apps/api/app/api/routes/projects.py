@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repository import Repository
 from app.db.session import get_db
-from app.models.schemas import Document, Project, ProjectCreate
+from app.models.schemas import Document, DocumentExtraction, Project, ProjectCreate
+from app.services.ingest import enqueue_ingest
 
 router = APIRouter()
 
@@ -14,9 +15,7 @@ async def list_projects(db: AsyncSession = Depends(get_db)) -> list[Project]:
 
 
 @router.post("", response_model=Project)
-async def create_project(
-    body: ProjectCreate, db: AsyncSession = Depends(get_db)
-) -> Project:
+async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)) -> Project:
     return await Repository(db).create_project(body.name, body.description)
 
 
@@ -29,10 +28,44 @@ async def get_project(project_id: str, db: AsyncSession = Depends(get_db)) -> Pr
 
 
 @router.get("/{project_id}/documents", response_model=list[Document])
-async def list_documents(
-    project_id: str, db: AsyncSession = Depends(get_db)
-) -> list[Document]:
+async def list_documents(project_id: str, db: AsyncSession = Depends(get_db)) -> list[Document]:
     repo = Repository(db)
     if not await repo.get_project(project_id):
         raise HTTPException(status_code=404, detail="project not found")
     return await repo.list_documents(project_id)
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/extraction",
+    response_model=DocumentExtraction,
+)
+async def get_document_extraction(
+    project_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> DocumentExtraction:
+    repo = Repository(db)
+    document = await repo.get_document(document_id)
+    if not document or document.project_id != project_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    extraction = await repo.get_extraction(document_id)
+    if not extraction:
+        raise HTTPException(status_code=404, detail="extraction not found")
+    return extraction
+
+
+@router.post("/{project_id}/documents/{document_id}/reingest", response_model=Document)
+async def reingest_document(
+    project_id: str,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Document:
+    repo = Repository(db)
+    document = await repo.get_document(document_id)
+    if not document or document.project_id != project_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    await enqueue_ingest(db, document_id)
+    updated = await repo.get_document(document_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="document not found")
+    return updated

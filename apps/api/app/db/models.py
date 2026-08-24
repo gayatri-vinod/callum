@@ -76,6 +76,90 @@ class DocumentRow(Base):
     )
 
     project: Mapped[ProjectRow] = relationship(back_populates="documents")
+    pages: Mapped[list[DocumentPageRow]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    chunks: Mapped[list[DocumentChunkRow]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    references: Mapped[list[DocumentReferenceRow]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    assets: Mapped[list[DocumentAssetRow]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentPageRow(Base):
+    __tablename__ = "document_pages"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_id)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, default="")
+    width: Mapped[float | None] = mapped_column(Float, nullable=True)
+    height: Mapped[float | None] = mapped_column(Float, nullable=True)
+    image_count: Mapped[int] = mapped_column(Integer, default=0)
+    meta: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
+
+    document: Mapped[DocumentRow] = relationship(back_populates="pages")
+
+
+class DocumentChunkRow(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_id)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    section: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_estimate: Mapped[int] = mapped_column(Integer, nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
+
+    document: Mapped[DocumentRow] = relationship(back_populates="chunks")
+
+
+class DocumentReferenceRow(Base):
+    __tablename__ = "document_references"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_id)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    doi: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
+    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    meta: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
+
+    document: Mapped[DocumentRow] = relationship(back_populates="references")
+
+
+class DocumentAssetRow(Base):
+    __tablename__ = "document_assets"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_id)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    meta: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
+
+    document: Mapped[DocumentRow] = relationship(back_populates="assets")
 
 
 class GraphNodeRow(Base):
