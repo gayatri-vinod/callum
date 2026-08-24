@@ -1,7 +1,7 @@
 from pathlib import Path
 
-import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -9,6 +9,7 @@ from app.db.repository import Repository
 from app.db.session import get_db
 from app.models.schemas import Document
 from app.services.ingest import detect_modality, enqueue_ingest
+from app.services.storage import StorageError, content_disposition, get_storage
 
 router = APIRouter()
 
@@ -32,7 +33,6 @@ async def upload_document(
     filename = file.filename or "upload.bin"
     title = Path(filename).stem.replace("_", " ")
 
-    # Persist row first to get id, then write file with that id
     doc = await repo.add_document(
         project_id=project_id,
         filename=filename,
@@ -43,13 +43,59 @@ async def upload_document(
         title=title,
     )
 
-    upload_root = Path(settings.upload_dir) / project_id
-    upload_root.mkdir(parents=True, exist_ok=True)
-    dest = upload_root / f"{doc.id}_{doc.filename}"
-    async with aiofiles.open(dest, "wb") as f:
-        await f.write(data)
+    storage = get_storage()
+    try:
+        stored = await storage.put_bytes(
+            project_id=project_id,
+            document_id=doc.id,
+            filename=filename,
+            data=data,
+            content_type=file.content_type,
+        )
+    except Exception as exc:
+        await repo.update_document(doc.id, status="failed")
+        raise HTTPException(status_code=502, detail=f"storage upload failed: {exc}") from exc
 
-    await repo.update_document(doc.id, storage_path=str(dest))
+    meta = dict(doc.meta or {})
+    meta["storage_backend"] = stored.backend
+    meta["storage_key"] = stored.key
+
+    await repo.update_document(
+        doc.id,
+        storage_path=stored.uri,
+        meta=meta,
+    )
     await enqueue_ingest(db, doc.id)
     updated = await repo.get_document(doc.id)
     return updated or doc
+
+
+@router.get("/{document_id}/content")
+async def download_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    repo = Repository(db)
+    doc = await repo.get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    # storage_path lives on the ORM row; re-fetch via repository internals
+    from app.db.models import DocumentRow
+
+    row = await db.get(DocumentRow, document_id)
+    if not row or not row.storage_path:
+        raise HTTPException(status_code=404, detail="file not stored yet")
+
+    storage = get_storage()
+    try:
+        data, content_type = await storage.get_bytes(row.storage_path)
+    except StorageError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    media = content_type or row.content_type or "application/octet-stream"
+    return Response(
+        content=data,
+        media_type=media,
+        headers={"Content-Disposition": content_disposition(row.filename)},
+    )

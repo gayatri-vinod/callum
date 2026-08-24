@@ -9,6 +9,7 @@ from app.api.routes import agent, graph, health, projects, search, upload
 from app.core.config import settings
 from app.db.seed import seed_if_empty
 from app.db.session import SessionLocal, init_db
+from app.services.storage import get_storage
 
 
 @asynccontextmanager
@@ -16,6 +17,8 @@ async def lifespan(app: FastAPI):
     await init_db()
     async with SessionLocal() as session:
         await seed_if_empty(session)
+    storage = get_storage()
+    await storage.ensure_ready()
     yield
 
 

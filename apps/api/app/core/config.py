@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     minio_secret_key: str = "callumsecret"
     minio_bucket: str = "callum"
     minio_secure: bool = False
+    # auto | minio | local — auto tries MinIO then falls back to filesystem
+    storage_backend: str = "auto"
 
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
